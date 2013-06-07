@@ -205,7 +205,10 @@ public class FeedRefreshUpdater {
 	private void handlePubSub(final Feed feed) {
 		Date lastPing = feed.getPushLastPing();
 		Date now = Calendar.getInstance().getTime();
-		if (lastPing == null || lastPing.before(DateUtils.addDays(now, -3))) {
+		if (feed.getPushTopic() != null
+				&& feed.getPushHub() != null
+				&& (lastPing == null || lastPing.before(DateUtils.addDays(now,
+						-3)))) {
 			new Thread() {
 				@Override
 				public void run() {
