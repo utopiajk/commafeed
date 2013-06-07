@@ -37,6 +37,13 @@ public class SubscriptionHandler {
 
 	public void subscribe(Feed feed) {
 
+		try {
+			// waiting before subscribing to pubsub
+			Thread.sleep(15000);
+		} catch (InterruptedException e1) {
+			// do nothing
+		}
+
 		String hub = feed.getPushHub();
 		String topic = feed.getPushTopic();
 		String publicUrl = FeedUtils
