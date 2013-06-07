@@ -61,6 +61,7 @@ public class SubscriptionHandler {
 
 		HttpClient client = HttpGetter.newClient();
 		try {
+			feedDAO.saveOrUpdate(feed);
 			post.setEntity(new UrlEncodedFormEntity(nvp));
 			HttpResponse response = client.execute(post);
 
