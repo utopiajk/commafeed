@@ -1,8 +1,10 @@
 package com.commafeed.backend.feeds;
 
+import java.util.Calendar;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -18,6 +20,7 @@ import javax.inject.Singleton;
 
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.time.DateUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,6 +30,7 @@ import com.commafeed.backend.dao.FeedEntryDAO;
 import com.commafeed.backend.model.ApplicationSettings;
 import com.commafeed.backend.model.Feed;
 import com.commafeed.backend.model.FeedEntry;
+import com.commafeed.backend.pubsubhubbub.SubscriptionHandler;
 import com.commafeed.backend.services.ApplicationSettingsService;
 import com.commafeed.backend.services.FeedUpdateService;
 import com.google.common.collect.Lists;
@@ -55,6 +59,9 @@ public class FeedRefreshUpdater {
 
 	@Inject
 	FeedEntryDAO feedEntryDAO;
+
+	@Inject
+	SubscriptionHandler subscriptionHandler;
 
 	private ThreadPoolExecutor pool;
 	private BlockingQueue<Runnable> queue;
@@ -123,6 +130,11 @@ public class FeedRefreshUpdater {
 			if (!ok) {
 				feed.setDisabledUntil(null);
 			}
+
+			if (applicationSettingsService.get().isPubsubhubbub()) {
+				handlePubSub(feed);
+			}
+
 			metricsBean.feedUpdated();
 			taskGiver.giveBack(feed);
 		}
@@ -188,6 +200,19 @@ public class FeedRefreshUpdater {
 	private String getKey(FeedEntry entry) {
 		return DigestUtils.sha1Hex(StringUtils.trimToEmpty(entry.getGuid()
 				+ entry.getUrl()));
+	}
+
+	private void handlePubSub(final Feed feed) {
+		Date lastPing = feed.getPushLastPing();
+		Date now = Calendar.getInstance().getTime();
+		if (lastPing == null || lastPing.before(DateUtils.addDays(now, -3))) {
+			new Thread() {
+				@Override
+				public void run() {
+					subscriptionHandler.subscribe(feed);
+				}
+			}.start();
+		}
 	}
 
 	public int getQueueSize() {
