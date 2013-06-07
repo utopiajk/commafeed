@@ -18,6 +18,7 @@ import javax.annotation.PreDestroy;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 
+import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang3.time.DateUtils;
 import org.slf4j.Logger;
@@ -71,7 +72,7 @@ public class FeedRefreshUpdater {
 		ApplicationSettings settings = applicationSettingsService.get();
 		int threads = Math.max(settings.getDatabaseUpdateThreads(), 1);
 		log.info("Creating database pool with {} threads", threads);
-		locks = Striped.lazyWeakLock(threads * 1000);
+		locks = Striped.lazyWeakLock(threads * 10000);
 		pool = new ThreadPoolExecutor(threads, threads, 0,
 				TimeUnit.MILLISECONDS,
 				queue = new ArrayBlockingQueue<Runnable>(500 * threads));
@@ -144,8 +145,7 @@ public class FeedRefreshUpdater {
 
 		List<Lock> currentLocks = Lists.newArrayList();
 		for (FeedEntry entry : entries) {
-			String key = getKey(entry);
-			Lock lock = locks.get(key);
+			Lock lock = locks.get(getKey(entry));
 
 			try {
 				boolean locked = lock.tryLock(1, TimeUnit.MINUTES);
@@ -153,7 +153,7 @@ public class FeedRefreshUpdater {
 					currentLocks.add(lock);
 				} else {
 					throw new InterruptedException("lock timeout for "
-							+ feed.getUrl() + " - " + key);
+							+ feed.getUrl() + " - " + entry.getGuid());
 				}
 			} catch (InterruptedException e) {
 				for (Lock l : currentLocks) {
@@ -189,7 +189,8 @@ public class FeedRefreshUpdater {
 	}
 
 	private String getKey(FeedEntry entry) {
-		return StringUtils.trimToEmpty(entry.getGuid() + entry.getUrl());
+		return DigestUtils.sha1Hex(StringUtils.trimToEmpty(entry.getGuid()
+				+ entry.getUrl()));
 	}
 
 	private void handlePubSub(final Feed feed) {
