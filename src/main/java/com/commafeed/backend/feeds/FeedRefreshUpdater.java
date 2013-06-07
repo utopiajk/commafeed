@@ -3,20 +3,17 @@ package com.commafeed.backend.feeds;
 import java.util.Calendar;
 import java.util.Collection;
 import java.util.Date;
-import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.RejectedExecutionHandler;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.Lock;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 
-import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang3.time.DateUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,15 +21,11 @@ import org.slf4j.LoggerFactory;
 import com.commafeed.backend.MetricsBean;
 import com.commafeed.backend.dao.FeedDAO;
 import com.commafeed.backend.dao.FeedEntryDAO;
-import com.commafeed.backend.dao.FeedSubscriptionDAO;
-import com.commafeed.backend.model.ApplicationSettings;
 import com.commafeed.backend.model.Feed;
 import com.commafeed.backend.model.FeedEntry;
-import com.commafeed.backend.model.FeedSubscription;
 import com.commafeed.backend.pubsubhubbub.SubscriptionHandler;
 import com.commafeed.backend.services.ApplicationSettingsService;
 import com.commafeed.backend.services.FeedUpdateService;
-import com.google.common.util.concurrent.Striped;
 
 @Singleton
 public class FeedRefreshUpdater {
@@ -59,24 +52,15 @@ public class FeedRefreshUpdater {
 	MetricsBean metricsBean;
 
 	@Inject
-	FeedSubscriptionDAO feedSubscriptionDAO;
-
-	@Inject
 	FeedEntryDAO feedEntryDAO;
 
 	private ThreadPoolExecutor pool;
 	private BlockingQueue<Runnable> queue;
-	private Striped<Lock> locks;
 
 	@PostConstruct
 	public void init() {
-		ApplicationSettings settings = applicationSettingsService.get();
-		int threads = Math.max(settings.getDatabaseUpdateThreads(), 1);
-		log.info("Creating database pool with {} threads", threads);
-		locks = Striped.lazyWeakLock(threads * 1000);
-		pool = new ThreadPoolExecutor(threads, threads, 0,
-				TimeUnit.MILLISECONDS,
-				queue = new ArrayBlockingQueue<Runnable>(500 * threads));
+		pool = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS,
+				queue = new ArrayBlockingQueue<Runnable>(10000));
 		pool.setRejectedExecutionHandler(new RejectedExecutionHandler() {
 			@Override
 			public void rejectedExecution(Runnable r, ThreadPoolExecutor e) {
@@ -120,10 +104,12 @@ public class FeedRefreshUpdater {
 		public void run() {
 			boolean ok = true;
 			if (entries.isEmpty() == false) {
-				List<FeedSubscription> subscriptions = feedSubscriptionDAO
-						.findByFeed(feed);
-				for (FeedEntry entry : entries) {
-					ok &= updateEntry(feed, entry, subscriptions);
+
+				try {
+					feedUpdateService.updateEntries(feed, entries);
+				} catch (Exception e) {
+					log.error(e.getMessage(), e);
+					ok = false;
 				}
 			}
 
@@ -136,32 +122,6 @@ public class FeedRefreshUpdater {
 			metricsBean.feedUpdated();
 			taskGiver.giveBack(feed);
 		}
-	}
-
-	private boolean updateEntry(final Feed feed, final FeedEntry entry,
-			final List<FeedSubscription> subscriptions) {
-		boolean success = false;
-		
-		String key = StringUtils.trimToEmpty(entry.getGuid() + entry.getUrl());
-		Lock lock = locks.get(key);
-		boolean locked = false;
-		try {
-			locked = lock.tryLock(1, TimeUnit.MINUTES);
-			if (locked) {
-				feedUpdateService.updateEntry(feed, entry, subscriptions);
-				success = true;
-			} else {
-				log.error("lock timeout for " + feed.getUrl() + " - " + key);
-			}
-		} catch (InterruptedException e) {
-			log.error("interrupted while waiting for lock for " + feed.getUrl()
-					+ " : " + e.getMessage(), e);
-		} finally {
-			if (locked) {
-				lock.unlock();
-			}
-		}
-		return success;
 	}
 
 	private void handlePubSub(final Feed feed) {

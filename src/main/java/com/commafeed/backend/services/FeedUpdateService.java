@@ -1,7 +1,9 @@
 package com.commafeed.backend.services;
 
 import java.util.Calendar;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 import javax.ejb.Stateless;
 import javax.inject.Inject;
@@ -16,6 +18,7 @@ import com.commafeed.backend.model.FeedEntry;
 import com.commafeed.backend.model.FeedEntryContent;
 import com.commafeed.backend.model.FeedEntryStatus;
 import com.commafeed.backend.model.FeedSubscription;
+import com.google.api.client.util.Maps;
 import com.google.common.collect.Lists;
 
 @Stateless
@@ -33,14 +36,27 @@ public class FeedUpdateService {
 	@Inject
 	MetricsBean metricsBean;
 
-	public void updateEntry(Feed feed, FeedEntry entry,
-			List<FeedSubscription> subscriptions) {
+	public void updateEntries(Feed feed, Collection<FeedEntry> entries) {
+		Map<FeedEntry, FeedEntry> map = Maps.newHashMap();
+		for (FeedEntry entry : entries) {
+			FeedEntry existing = FeedUtils.findEntry(
+					feedEntryDAO.findByGuid(entry.getGuid()), entry);
+			map.put(entry, existing);
+		}
 
-		FeedEntry foundEntry = FeedUtils.findEntry(
-				feedEntryDAO.findByGuid(entry.getGuid()), entry);
+		List<FeedSubscription> subscriptions = feedSubscriptionDAO
+				.findByFeed(feed);
+		for (FeedEntry entry : entries) {
+			updateEntry(feed, entry, map.get(entry), subscriptions);
+		}
+
+	}
+
+	public void updateEntry(Feed feed, FeedEntry entry,
+			FeedEntry existingEntry, List<FeedSubscription> subscriptions) {
 
 		FeedEntry update = null;
-		if (foundEntry == null) {
+		if (existingEntry == null) {
 			FeedEntryContent content = entry.getContent();
 			content.setTitle(FeedUtils.truncate(
 					FeedUtils.handleContent(content.getTitle(), feed.getLink()),
@@ -52,9 +68,9 @@ public class FeedUpdateService {
 			entry.getFeeds().add(feed);
 
 			update = entry;
-		} else if (FeedUtils.findFeed(foundEntry.getFeeds(), feed) == null) {
-			foundEntry.getFeeds().add(feed);
-			update = foundEntry;
+		} else if (FeedUtils.findFeed(existingEntry.getFeeds(), feed) == null) {
+			existingEntry.getFeeds().add(feed);
+			update = existingEntry;
 		}
 
 		if (update != null) {
