@@ -14,7 +14,7 @@ public abstract class AbstractModel implements Serializable {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.TABLE, generator = "gen")
-	@TableGenerator(name = "gen", allocationSize = 20)
+	@TableGenerator(name = "gen", allocationSize = 1000)
 	private Long id;
 
 	public Long getId() {
