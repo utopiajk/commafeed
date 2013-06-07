@@ -37,10 +37,15 @@ public class FeedUpdateService {
 	MetricsBean metricsBean;
 
 	public void updateEntries(Feed feed, Collection<FeedEntry> entries) {
+		List<String> guids = Lists.newArrayList();
+		for (FeedEntry entry : entries) {
+			guids.add(entry.getGuid());
+		}
+		List<FeedEntry> existingEntries = feedEntryDAO.findByGuids(guids);
+
 		Map<FeedEntry, FeedEntry> map = Maps.newHashMap();
 		for (FeedEntry entry : entries) {
-			FeedEntry existing = FeedUtils.findEntry(
-					feedEntryDAO.findByGuid(entry.getGuid()), entry);
+			FeedEntry existing = FeedUtils.findEntry(existingEntries, entry);
 			map.put(entry, existing);
 		}
 

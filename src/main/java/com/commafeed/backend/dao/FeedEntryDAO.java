@@ -5,7 +5,6 @@ import java.util.List;
 import javax.ejb.Stateless;
 import javax.persistence.TypedQuery;
 import javax.persistence.criteria.CriteriaQuery;
-import javax.persistence.criteria.JoinType;
 import javax.persistence.criteria.Root;
 import javax.persistence.criteria.SetJoin;
 
@@ -46,11 +45,14 @@ public class FeedEntryDAO extends GenericDAO<FeedEntry> {
 		CriteriaQuery<FeedEntry> query = builder.createQuery(getType());
 		Root<FeedEntry> root = query.from(getType());
 
-		query.distinct(true);
 		query.where(root.get(FeedEntry_.guidHash).in(hashes));
-		root.fetch(FeedEntry_.feeds, JoinType.LEFT);
+
 		TypedQuery<FeedEntry> q = em.createQuery(query);
-		return q.getResultList();
+		List<FeedEntry> list = q.getResultList();
+		for (FeedEntry entry : list) {
+			Hibernate.initialize(entry.getFeeds());
+		}
+		return list;
 	}
 
 	public List<FeedEntry> findByFeed(Feed feed, int offset, int limit) {
