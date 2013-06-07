@@ -72,7 +72,7 @@ public class FeedRefreshUpdater {
 		ApplicationSettings settings = applicationSettingsService.get();
 		int threads = Math.max(settings.getDatabaseUpdateThreads(), 1);
 		log.info("Creating database pool with {} threads", threads);
-		locks = Striped.lazyWeakLock(threads * 10000);
+		locks = Striped.lazyWeakLock(threads * 100000);
 		pool = new ThreadPoolExecutor(threads, threads, 0,
 				TimeUnit.MILLISECONDS,
 				queue = new ArrayBlockingQueue<Runnable>(500 * threads));
@@ -143,20 +143,20 @@ public class FeedRefreshUpdater {
 			throws InterruptedException {
 		entries = sortEntries(entries);
 
-		List<Lock> currentLocks = Lists.newArrayList();
-		for (FeedEntry entry : entries) {
-			Lock lock = locks.get(getKey(entry));
+		Iterable<Lock> bulkLocks = locks.bulkGet(getKeys(entries));
+		List<Lock> lockedLocks = Lists.newArrayList();
 
+		for (Lock lock : bulkLocks) {
 			try {
 				boolean locked = lock.tryLock(1, TimeUnit.MINUTES);
 				if (locked) {
-					currentLocks.add(lock);
+					lockedLocks.add(lock);
 				} else {
 					throw new InterruptedException("lock timeout for "
-							+ feed.getUrl() + " - " + entry.getGuid());
+							+ feed.getUrl());
 				}
 			} catch (InterruptedException e) {
-				for (Lock l : currentLocks) {
+				for (Lock l : lockedLocks) {
 					l.unlock();
 				}
 				throw e;
@@ -166,7 +166,7 @@ public class FeedRefreshUpdater {
 		try {
 			feedUpdateService.updateEntries(feed, entries);
 		} finally {
-			for (Lock l : currentLocks) {
+			for (Lock l : lockedLocks) {
 				l.unlock();
 			}
 		}
@@ -186,6 +186,14 @@ public class FeedRefreshUpdater {
 			}
 		});
 		return list;
+	}
+
+	private List<String> getKeys(Collection<FeedEntry> entries) {
+		List<String> keys = Lists.newArrayList();
+		for (FeedEntry entry : entries) {
+			keys.add(getKey(entry));
+		}
+		return keys;
 	}
 
 	private String getKey(FeedEntry entry) {
