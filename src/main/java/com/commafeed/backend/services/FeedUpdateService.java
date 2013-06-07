@@ -41,7 +41,11 @@ public class FeedUpdateService {
 		for (FeedEntry entry : entries) {
 			guids.add(entry.getGuid());
 		}
-		List<FeedEntry> existingEntries = feedEntryDAO.findByGuids(guids);
+		
+		List<FeedEntry> existingEntries = Lists.newArrayList();
+		for (List<String> subList : Lists.partition(guids, 10)) {
+			existingEntries.addAll(feedEntryDAO.findByGuids(subList));
+		}
 
 		Map<FeedEntry, FeedEntry> map = Maps.newHashMap();
 		for (FeedEntry entry : entries) {

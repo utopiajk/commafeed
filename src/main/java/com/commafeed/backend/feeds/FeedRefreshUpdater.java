@@ -95,9 +95,7 @@ public class FeedRefreshUpdater {
 	}
 
 	public void updateFeed(Feed feed, List<FeedEntry> entries) {
-		for (List<FeedEntry> subList : Lists.partition(entries, 10)) {
-			pool.execute(new Task(feed, subList));
-		}
+		pool.execute(new Task(feed, entries));
 	}
 
 	private class Task implements Runnable {
@@ -114,7 +112,6 @@ public class FeedRefreshUpdater {
 		public void run() {
 			boolean ok = true;
 			if (entries.isEmpty() == false) {
-
 				try {
 					updateEntries(feed, entries);
 				} catch (Exception e) {
