@@ -206,6 +206,7 @@ public class FeedRefreshUpdater {
 			Date lastPing = feed.getPushLastPing();
 			Date now = Calendar.getInstance().getTime();
 			if (lastPing == null || lastPing.before(DateUtils.addDays(now, -3))) {
+				feedDAO.saveOrUpdate(feed);
 				new Thread() {
 					@Override
 					public void run() {
