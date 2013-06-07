@@ -29,7 +29,7 @@ import com.commafeed.backend.model.Feed;
 import com.commafeed.backend.model.FeedEntry;
 import com.commafeed.backend.services.ApplicationSettingsService;
 import com.commafeed.backend.services.FeedUpdateService;
-import com.google.api.client.util.Lists;
+import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.Striped;
 
 @Singleton
@@ -94,8 +94,10 @@ public class FeedRefreshUpdater {
 		}
 	}
 
-	public void updateFeed(Feed feed, Collection<FeedEntry> entries) {
-		pool.execute(new Task(feed, entries));
+	public void updateFeed(Feed feed, List<FeedEntry> entries) {
+		for (List<FeedEntry> subList : Lists.partition(entries, 10)) {
+			pool.execute(new Task(feed, subList));
+		}
 	}
 
 	private class Task implements Runnable {
